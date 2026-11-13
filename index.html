@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VikOS_LITE</title>
+    <style>
+        :root {
+            --accent: #00d2ff;
+            --ui-base: #0a0a0a;
+            --glass: rgba(10, 10, 10, 0.95);
+            --header-h: 55px;
+            --lightning: var(--accent);
+        }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #000; color: white; }
+        #desktop { position: absolute; inset: 0; background-size: cover; background-position: center; z-index: 1; transition: 0.5s ease; image-rendering: crisp-edges; image-rendering: -webkit-optimize-contrast; }
+        .lightning-border { position: relative; overflow: hidden; border: 2px solid var(--accent) !important; box-shadow: 0 0 15px var(--lightning), 0 0 30px var(--lightning); }
+        .lightning-border::before {
+            content: ''; position: absolute; inset: -4px; border-radius: inherit;
+            background: linear-gradient(45deg, #ff00ff, var(--lightning), #c300ff, #ff00ff);
+            background-size: 300% 300%; animation: lightningPulse 6s ease infinite; opacity: 0.5; pointer-events: none; z-index: -1;
+        }
+        .lightning-border::after {
+            content: ''; position: absolute; inset: -6px; border-radius: inherit;
+            box-shadow: 0 0 25px var(--lightning), 0 0 50px #ff00ff; opacity: 0.4; animation: lightningGlow 4s ease-in-out infinite alternate; pointer-events: none;
+        }
+        @keyframes lightningPulse { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+        @keyframes lightningGlow { 0% { opacity: 0.3; } 100% { opacity: 0.7; } }
+        #taskbar, #start-menu, .window { border-radius: 15px; }
+        #taskbar { position: absolute; bottom: 0; width: 100%; height: 50px; background: var(--glass); backdrop-filter: blur(25px); border-top: 3px solid var(--accent); display: flex; align-items: center; z-index: 9999; }
+        #start-btn { width: 110px; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 27px; cursor: pointer; filter: drop-shadow(0 0 10px var(--accent)); transition: 0.1s; }
+        #start-btn:hover { background: rgba(255,255,255,0.1); }
+        #clock { margin-left: auto; padding-right: 40px; font-size: 20px; font-family: 'Courier New', monospace; color: var(--accent); font-weight: 900; line-height: 1; text-align: right; }
+        #start-menu { position: absolute; bottom: 60px; left: 10px; width: 350px; max-height: 650px; background: var(--glass); border: 2px solid var(--accent); display: none; flex-direction: column; padding: 25px; z-index: 10000; box-shadow: 0 0 50px rgba(0,0,0,0.9); }
+        #start-search { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid var(--accent); background: rgba(255,255,255,0.1); color: white; margin-bottom: 20px; box-sizing: border-box; font-size: 18px; outline: none; }
+        #app-list { overflow-y: auto; flex: 1; }
+        .menu-item { padding: 18px; cursor: pointer; border-radius: 10px; display: flex; align-items: center; transition: 0.2s; font-weight: bold; font-size: 20px; margin-bottom: 5px; }
+        .menu-item:hover { background: rgba(0, 210, 255, 0.2); transform: translateX(10px); }
+        .menu-item .emoji { font-size: 30px; margin-right: 20px; }
+        .window { position: absolute; background: var(--glass); box-shadow: 0 0 60px rgba(0,0,0,0.8); display: flex; flex-direction: column; backdrop-filter: blur(35px); z-index: 100; overflow: hidden; min-width: 350px; min-height: 450px; }
+        .window.full { width: 100% !important; height: calc(100% - 50px) !important; top: 0 !important; left: 0 !important; border-radius: 0; }
+        .window.collapsed { height: var(--header-h) !important; min-height: 0 !important; }
+        .header { height: var(--header-h); background: rgba(255,255,255,0.08); display: flex; align-items: center; padding: 0 25px; cursor: move; user-select: none; }
+        .header .title { flex: 1; font-size: 18px; font-weight: 900; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; }
+        .win-ctrl { display: flex; height: 100%; }
+        .win-ctrl button { background: none; border: none; color: white; width: 55px; height: 100%; cursor: pointer; font-size: 24px; transition: 0.2s; }
+        .win-ctrl button:hover { background: rgba(255,255,255,0.1); }
+        .win-ctrl .close:hover { background: #ff4444; }
+        .win-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; background: rgba(0,0,0,0.1); }
+        .terminal { background:#000; color:#00ff41; font-family:'Courier New',Consolas,monospace; font-size:15px; line-height:1.5; padding:0; height:100%; }
+        .terminal-output { flex:1; overflow-y:auto; padding:18px 18px 0; white-space:pre-wrap; word-break:break-word; }
+        .terminal-input-line { display:flex; align-items:center; padding:0 18px 14px; background:#000; border-top:1px solid #003300; }
+        .terminal-prompt { color:#00ff41; font-weight:bold; white-space:pre; }
+        .terminal-input { flex:1; background:transparent; border:none; color:#00ff41; font-family:inherit; font-size:inherit; outline:none; caret-color:#00ff88; }
+        .ide-root, .browser-root { display: flex; flex-direction: column; height: 100%; width: 100%; }
+        .ide-toolbar, .browser-toolbar { height: 65px; background: #151515; display: flex; align-items: center; padding: 0 20px; gap: 15px; border-bottom: 1px solid #333; flex-shrink: 0; }
+        .ide-split, .browser-viewport { display: flex; flex: 1; width: 100%; overflow: hidden; }
+        .editor-side { flex: 1; height: 100%; display: flex; border-right: 2px solid var(--accent); }
+        .preview-side { flex: 1; height: 100%; background: white; display: flex; }
+        .ide-text { width: 100%; height: 100%; background: #0a0a0a; color: #00ff88; font-family: 'Consolas', monospace; font-size: 20px; border: none; padding: 25px; outline: none; resize: none; box-sizing: border-box; }
+        iframe { width: 100%; height: 100%; border: none; background: #fff; }
+        .url-bar { flex: 1; background: #000; border: 1px solid #444; color: var(--accent); padding: 10px; border-radius: 8px; outline: none; font-family: monospace; }
+        .explorer-list { padding: 15px; overflow-y: auto; }
+        .file-card { background: rgba(255,255,255,0.05); margin-bottom: 15px; padding: 25px; border-radius: 12px; display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.1); transition: 0.3s; }
+        .file-card:hover { border-color: var(--accent); background: rgba(0,210,255,0.05); }
+        .file-info { flex: 1; font-size: 20px; font-weight: bold; color: var(--accent); }
+        .settings-grid { padding: 30px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+        .settings-grid label { font-weight: bold; color: var(--accent); font-size: 16px; }
+        input[type="color"], select { width: 100%; height: 40px; border: none; background: #111; color: #0f0; cursor: pointer; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+        .resizer { position: absolute; right: 0; bottom: 0; width: 35px; height: 35px; cursor: nwse-resize; z-index: 1001; }
+        .action-btn { background: var(--accent); border: none; color: black; padding: 12px 20px; font-weight: bold; cursor: pointer; border-radius: 8px; font-size: 14px; }
+        .action-btn:hover { filter: brightness(1.2); }
+        .danger-btn { background: #ff4444; color: white; }
+    </style>
+</head>
+<body onload="boot()">
+<div id="desktop"></div>
+<div id="taskbar" class="lightning-border">
+    <div id="start-btn" onclick="toggleStart()">START🔷</div>
+    <div id="clock"></div>
+</div>
+<div id="start-menu" class="lightning-border">
+    <input type="text" id="start-search" placeholder="Search Logic..." onkeyup="searchApps()">
+    <div id="app-list"></div>
+</div>
+<script>
+// Prevent spacebar from scrolling page when focused on canvas/game
+document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+    }
+}, { passive: false });
+let zIndex = 1000;
+const Kernel = {
+    fs: JSON.parse(localStorage.getItem("vik_master_fs")) || {
+        "User": { "hello.html": "<html><body style='background:#000;color:cyan;display:flex;justify-content:center;align-items:center;height:100vh;'><h1>VikOS Ready</h1></body></html>" }
+    },
+    settings: JSON.parse(localStorage.getItem("vik_master_settings")) || {
+        wallpaper: "https://files.catbox.moe/twy3r4.jpg",
+        accent: "#1894ae",
+        base: "#0a0a0a",
+        opacity: 0.1,
+        lightningEnabled: false
+    },
+    apps: [],
+    installedApps: JSON.parse(localStorage.getItem("vik_installed_apps") || "[]")
+};
+function saveAll() {
+    localStorage.setItem("vik_master_fs", JSON.stringify(Kernel.fs));
+    localStorage.setItem("vik_master_settings", JSON.stringify(Kernel.settings));
+    localStorage.setItem("vik_installed_apps", JSON.stringify(Kernel.installedApps));
+}
+function applyTheme() {
+    document.documentElement.style.setProperty('--accent', Kernel.settings.accent);
+    document.documentElement.style.setProperty('--ui-base', Kernel.settings.base);
+    const r = parseInt(Kernel.settings.base.slice(1,3),16) || 10;
+    const g = parseInt(Kernel.settings.base.slice(3,5),16) || 10;
+    const b = parseInt(Kernel.settings.base.slice(5,7),16) || 10;
+    document.documentElement.style.setProperty('--glass', `rgba(${r},${g},${b},${Kernel.settings.opacity})`);
+    document.documentElement.style.setProperty('--lightning', Kernel.settings.accent);
+    document.getElementById("desktop").style.backgroundImage = `url(${Kernel.settings.wallpaper})`;
+    document.getElementById("desktop").style.backgroundSize = "cover";
+    document.getElementById("desktop").style.backgroundPosition = "center";
+    document.getElementById("desktop").style.backgroundRepeat = "no-repeat";
+    document.getElementById("desktop").style.imageRendering = "crisp-edges";
+    // Apply/remove lightning
+    const elements = [document.getElementById("taskbar"), document.getElementById("start-menu")];
+    document.querySelectorAll(".window").forEach(el => elements.push(el));
+    elements.forEach(el => {
+        if (el) {
+            if (Kernel.settings.lightningEnabled) el.classList.add("lightning-border");
+            else el.classList.remove("lightning-border");
+        }
+    });
+}
+function createWindow(title, content, w=1000, h=700) {
+    const id = "win_" + Date.now();
+    const win = document.createElement("div");
+    win.className = "window";
+    win.id = id;
+    win.style.cssText = `width:${w}px;height:${h}px;left:120px;top:100px;z-index:${zIndex++};`;
+    win.innerHTML = `
+        <div class="header">
+            <div class="title">${title}</div>
+            <div class="win-ctrl">
+                <button onclick="document.getElementById('${id}').classList.toggle('collapsed')">_</button>
+                <button onclick="document.getElementById('${id}').classList.toggle('full')">▢</button>
+                <button class="close" onclick="document.getElementById('${id}').remove()">✕</button>
+            </div>
+        </div>
+        <div class="win-body"></div>
+        <div class="resizer"></div>
+    `;
+    const body = win.querySelector(".win-body");
+    if (typeof content === "string") body.innerHTML = content;
+    else if (content && content.nodeType) body.appendChild(content);
+    else if (content) body.innerHTML = content;
+    document.getElementById("desktop").appendChild(win);
+    initDrag(win);
+    initResize(win);
+    win.onmousedown = () => win.style.zIndex = zIndex++;
+    // Clamp window to prevent going under taskbar or off-screen
+    function clamp() {
+        const taskH = 50;
+        const pad = 10;
+        const maxL = window.innerWidth - win.offsetWidth - pad;
+        const maxT = window.innerHeight - win.offsetHeight - taskH - pad;
+        let l = parseInt(win.style.left) || 120;
+        let t = parseInt(win.style.top) || 100;
+        win.style.left = Math.max(pad, Math.min(l, maxL)) + 'px';
+        win.style.top = Math.max(pad, Math.min(t, maxT)) + 'px';
+    }
+    // Drag with clamping
+    const header = win.querySelector(".header");
+    header.addEventListener('mousedown', e => {
+        if (e.target.tagName === 'BUTTON') return;
+        let ox = e.clientX - win.offsetLeft;
+        let oy = e.clientY - win.offsetTop;
+        const move = em => {
+            win.style.left = (em.clientX - ox) + 'px';
+            win.style.top = (em.clientY - oy) + 'px';
+            clamp();
+        };
+        const up = () => {
+            document.removeEventListener('mousemove', move);
+            document.removeEventListener('mouseup', up);
+            clamp();
+        };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+    });
+    // Resize with clamping
+    const resizer = win.querySelector(".resizer");
+    resizer.addEventListener('mousedown', e => {
+        e.preventDefault();
+        let sx = e.clientX, sy = e.clientY, sw = win.offsetWidth, sh = win.offsetHeight;
+        const move = em => {
+            win.style.width = Math.max(350, sw + em.clientX - sx) + 'px';
+            win.style.height = Math.max(100, sh + em.clientY - sy) + 'px';
+            clamp();
+        };
+        const up = () => {
+            document.removeEventListener('mousemove', move);
+            document.removeEventListener('mouseup', up);
+            clamp();
+        };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+    });
+    applyTheme();
+    return win;
+}
+function initDrag(win) { /* kept for compatibility */ }
+function initResize(win) { /* kept for compatibility */ }
+// === APPS ===
+// === VIK-OS SOUND ENGINE ===
+const vikSounds = {
+  ctx: null,
+
+  init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (this.ctx.state === "suspended") {
+      this.ctx.resume();
+    }
+  },
+
+  playTone(freq, type, duration, delay = 0, vol = 0.15) {
+    this.init();
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const startTime = this.ctx.currentTime + delay;
+
+    osc.type = type; // "sine", "triangle", "square", "sawtooth"
+    osc.frequency.setValueAtTime(freq, startTime);
+
+    gain.gain.setValueAtTime(vol, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+  },
+
+  // 1. System Startup Chime
+  startup() {
+    this.playTone(261.63, "sine", 0.5, 0.0, 0.2);  // C4
+    this.playTone(329.63, "sine", 0.5, 0.15, 0.2); // E4
+    this.playTone(392.00, "sine", 0.6, 0.30, 0.2); // G4
+    this.playTone(523.25, "sine", 0.9, 0.45, 0.25); // C5
+  },
+
+  // 2. Start Menu Open / Close
+  startOpen() {
+    this.playTone(400, "triangle", 0.12, 0.0, 0.15);
+    this.playTone(600, "triangle", 0.15, 0.06, 0.15);
+  },
+  startClose() {
+    this.playTone(600, "triangle", 0.12, 0.0, 0.15);
+    this.playTone(400, "triangle", 0.15, 0.06, 0.15);
+  },
+
+  // 3. Program Open / Close
+  appOpen() {
+    this.playTone(520, "sine", 0.1, 0.0, 0.15);
+    this.playTone(780, "sine", 0.18, 0.07, 0.15);
+  },
+  appClose() {
+    this.playTone(620, "sine", 0.1, 0.0, 0.15);
+    this.playTone(380, "sine", 0.18, 0.07, 0.15);
+  }
+};
+// ==========================================
+// 🔷 VIKMAN AI PRO (WITH LIVE WEB, HISTORY & IMAGES)
+// ==========================================
+function openVikmanAI() {
+    const root = document.createElement("div");
+    root.className = "vikman-ai-root";
+    root.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: linear-gradient(145deg, rgba(5, 12, 22, 0.96), rgba(10, 25, 45, 0.96));
+        color: #ffffff;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        box-sizing: border-box;
+        overflow: hidden;
+    `;
+
+    // Load saved history if available, or initialize default greeting
+    if (!window.Kernel.aiHistory) {
+        window.Kernel.aiHistory = [
+            { sender: 'ai', text: '👋 Hello! I am VIKMAN AI. I can search Google/Wikipedia live, manage your chat history with autosave, and share image previews.' }
+        ];
+    }
+
+    root.innerHTML = `
+        <!-- HEADER TOOLBAR -->
+        <div style="height: 52px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(0, 210, 255, 0.3); display: flex; align-items: center; padding: 0 16px; gap: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
+            <div style="font-size: 24px; text-shadow: 0 0 12px var(--accent, #00d2ff);">🔷</div>
+            <div>
+                <div style="font-weight: 800; font-size: 15px; letter-spacing: 1.5px; color: var(--accent, #00d2ff); text-shadow: 0 0 10px rgba(0, 210, 255, 0.5);">VIKMAN AI PRO</div>
+                <div style="font-size: 10px; color: #94a3b8; letter-spacing: 0.5px;">WEB SEARCH & AUTO-SAVE ACTIVE</div>
+            </div>
+            <div style="margin-left: auto; display: flex; gap: 8px;">
+                <button onclick="clearVikmanAiChat(this)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 600;">Clear Chat</button>
+            </div>
+        </div>
+
+        <!-- MAIN SPLIT: CHAT & LIVE WEB/IMAGE VIEWER -->
+        <div style="flex: 1; display: flex; overflow: hidden;">
+            <!-- CHAT PANE -->
+            <div class="ai-viewport" style="flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; border-right: 1px solid rgba(255,255,255,0.08); scroll-behavior: smooth;"></div>
+
+            <!-- LIVE EMBED PANE (Google / Wikipedia / Image Previews) -->
+            <div class="ai-pane-right" style="width: 45%; display: flex; flex-direction: column; background: rgba(0,0,0,0.4);">
+                <div style="padding: 8px 12px; background: rgba(0,0,0,0.6); font-size: 11px; color: var(--accent, #00d2ff); border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between;">
+                    <span>🌐 LIVE WEB & SOURCE VIEWER</span>
+                    <span style="font-size: 10px; opacity: 0.7;">Google / Wiki / Img</span>
+                </div>
+                <iframe class="ai-live-frame" src="https://www.google.com/search?igu=1" style="flex: 1; border: none; background: #fff;"></iframe>
+            </div>
+        </div>
+
+        <!-- INPUT BAR -->
+        <div style="padding: 12px 16px; background: rgba(10, 15, 26, 0.9); border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; gap: 10px; align-items: center;">
+            <input type="text" class="ai-msg-input" placeholder="Ask anything, type 'search [query]', or 'show image'..." style="flex: 1; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(0, 210, 255, 0.3); color: #ffffff; padding: 11px 15px; border-radius: 10px; outline: none; font-size: 13px;" onkeydown="if(event.key==='Enter') sendVikmanAiMessage(this)">
+            <button onclick="sendVikmanAiMessage(this)" style="background: var(--accent, #00d2ff); color: #000000; border: none; padding: 11px 20px; border-radius: 10px; font-weight: 800; font-size: 12px; cursor: pointer; letter-spacing: 1px; box-shadow: 0 0 12px rgba(0, 210, 255, 0.4);">SEND 🔷</button>
+        </div>
+    `;
+
+    createWindow("VIKMAN AI🔷", root, 600, 500);
+    renderVikmanAiHistory(root);
+}
+
+// ==========================================
+// ⚙️ CHAT & AUTO-SAVE / WEB LOGIC
+// ==========================================
+
+function renderVikmanAiHistory(root) {
+    const viewport = root.querySelector('.ai-viewport');
+    viewport.innerHTML = '';
+
+    window.Kernel.aiHistory.forEach(msg => {
+        const bubble = document.createElement('div');
+        if (msg.sender === 'user') {
+            bubble.style.cssText = "background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); padding: 10px 14px; border-radius: 12px; max-width: 85%; align-self: flex-end; font-size: 13px; color: #fff;";
+            bubble.textContent = msg.text;
+        } else {
+            bubble.style.cssText = "background: rgba(0, 210, 255, 0.08); border: 1px solid rgba(0, 210, 255, 0.3); padding: 12px 16px; border-radius: 12px; max-width: 90%; font-size: 13px; line-height: 1.4; color: #f1f5f9;";
+            bubble.innerHTML = `<div style="font-weight:700; color:var(--accent, #00d2ff); margin-bottom:4px;">🔷 VIKMAN AI</div>` + msg.html;
+        }
+        viewport.appendChild(bubble);
+    });
+    viewport.scrollTop = viewport.scrollHeight;
+}
+
+window.sendVikmanAiMessage = (el) => {
+    const root = el.closest('.vikman-ai-root');
+    const input = root.querySelector('.ai-msg-input');
+    const query = input.value.trim();
+    if (!query) return;
+
+    // Push User Message
+    window.Kernel.aiHistory.push({ sender: 'user', text: query });
+    input.value = '';
+    renderVikmanAiHistory(root);
+
+    // Generate AI Reply & Interact with Frame / Images
+    setTimeout(() => {
+        let replyHtml = "";
+        const lower = query.toLowerCase();
+        const frame = root.querySelector('.ai-live-frame');
+
+        if (lower.startsWith('search ')) {
+            const searchTerm = query.substring(7).trim();
+            const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchTerm)}&igu=1`;
+            frame.src = searchUrl;
+            replyHtml = `I have updated the live viewer pane with your Google search for: <b>"${searchTerm}"</b>.`;
+        } 
+        else if (lower.includes('wiki') || lower.includes('wikipedia')) {
+            const term = lower.replace('wikipedia', '').replace('wiki', '').trim() || 'Vik-OS';
+            frame.src = `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(term)}`;
+            replyHtml = `Loaded Wikipedia source viewer for: <b>"${term}"</b>.`;
+        }
+        else if (lower.includes('image') || lower.includes('wallpaper') || lower.includes('pic')) {
+            const sampleImg = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800&auto=format&fit=crop";
+            replyHtml = `
+                Here is a requested high-end Aero image preview from the catalog:<br>
+                <div style="margin-top:8px; border-radius:8px; overflow:hidden; border:1px solid var(--accent, #00d2ff); max-width:240px;">
+                    <img src="${sampleImg}" style="width:100%; height:130px; object-fit:cover; display:block;">
+                </div>
+            `;
+        }
+        else {
+            replyHtml = `Processed query: <i>"${query}"</i>. All interactions and chat states are auto-saved in your OS memory!`;
+        }
+
+        window.Kernel.aiHistory.push({ sender: 'ai', html: replyHtml });
+        if (typeof saveAll === 'function') saveAll(); // Autosave state
+        renderVikmanAiHistory(root);
+    }, 350);
+};
+
+window.clearVikmanAiChat = (btn) => {
+    const root = btn.closest('.vikman-ai-root');
+    window.Kernel.aiHistory = [
+        { sender: 'ai', text: 'Chat history cleared and reset.' }
+    ];
+    if (typeof saveAll === 'function') saveAll();
+    renderVikmanAiHistory(root);
+};
+// --- VIKMAN INTERFACE : ROMBUS BROWSER 🔷 ---
+function openRombus() {
+    const root = document.createElement("div");
+    root.className = "browser-root";
+    root.style.cssText = "display:flex; flex-direction:column; height:100%; background:#0a0a0a; color:white;";
+
+    root.innerHTML = `
+        <div class="browser-toolbar" style="height:55px; background:#111; display:flex; align-items:center; padding:0 15px; gap:10px; border-bottom:2px solid var(--accent);">
+            <button class="action-btn" onclick="openRombusSearchHome(this)" style="background:var(--accent); color:#000; font-weight:bold; border:none; padding:8px 14px; border-radius:8px; cursor:pointer;">🔷 ROMBUS SEARCH</button>
+            <input type="text" class="url-bar" value="rombus://search" placeholder="Type search term or URL..." style="flex:1; background:#000; border:1px solid #333; color:var(--accent); padding:10px; border-radius:8px; outline:none; font-family:monospace; font-size:14px;">
+            <button class="action-btn" onclick="executeRombusNavigation(this)" style="background:#222; color:var(--accent); border:1px solid var(--accent); padding:8px 16px; border-radius:8px; cursor:pointer; font-weight:bold;">GO 🔷</button>
+        </div>
+        <div class="browser-viewport" style="flex:1; position:relative; overflow:hidden;">
+            <div class="rombus-search-page" style="position:absolute; inset:0; background:linear-gradient(135deg, #050b14, #0a192f); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px; z-index:2;">
+                <div style="font-size:60px; margin-bottom:10px;">🔷</div>
+                <h1 style="margin:0 0 5px 0; color:var(--accent); font-size:38px; letter-spacing:4px; text-shadow:0 0 15px var(--accent);">ROMBUS SEARCH</h1>
+                <p style="color:#64748b; margin-bottom:30px; font-size:15px; letter-spacing:1px;">Vikman Interface Engine</p>
+
+                <div style="display:flex; width:100%; max-width:580px; gap:10px;">
+                    <input type="text" class="rombus-main-search-input" placeholder="Search with Rombus..." style="flex:1; padding:15px 20px; border-radius:12px; border:2px solid var(--accent); background:rgba(0,0,0,0.7); color:#fff; font-size:16px; outline:none;" onkeydown="if(event.key==='Enter') runRombusSearch(this)">
+                    <button onclick="runRombusSearch(this)" style="padding:0 24px; background:var(--accent); color:#000; font-weight:bold; font-size:20px; border:none; border-radius:12px; cursor:pointer;">🔷</button>
+                </div>
+            </div>
+            <iframe class="rombus-web-frame" style="width:100%; height:100%; border:none; display:none; background:#fff;"></iframe>
+        </div>
+    `;
+
+    createWindow("VIKMAN INTERFACE • ROMBUS BROWSER 🔷", root, 450, 550);
+}
+
+// --- ROMBUS SEARCH INTERNAL LOGIC (CLEAN) ---
+window.openRombusSearchHome = (btn) => {
+    const root = btn.closest('.browser-root');
+    root.querySelector('.rombus-search-page').style.display = 'flex';
+    root.querySelector('.rombus-web-frame').style.display = 'none';
+    root.querySelector('.url-bar').value = 'rombus://search';
+    root.querySelector('.rombus-main-search-input').value = '';
+};
+
+window.runRombusSearch = (btn) => {
+    const root = btn.closest('.browser-root');
+    const input = root.querySelector('.rombus-main-search-input');
+    const query = input.value.trim();
+    if (!query) return;
+    
+    navigateRombusBrowser(root, query);
+};
+
+window.executeRombusNavigation = (btn) => {
+    const root = btn.closest('.browser-root');
+    const urlBar = root.querySelector('.url-bar');
+    const query = urlBar.value.trim();
+    if (!query) return;
+
+    navigateRombusBrowser(root, query);
+};
+
+function navigateRombusBrowser(root, query) {
+    const searchPage = root.querySelector('.rombus-search-page');
+    const frame = root.querySelector('.rombus-web-frame');
+    const urlBar = root.querySelector('.url-bar');
+
+    if (query === 'rombus://search') {
+        searchPage.style.display = 'flex';
+        frame.style.display = 'none';
+        urlBar.value = 'rombus://search';
+        return;
+    }
+
+    let targetUrl = '';
+    if (query.includes('.') && !query.includes(' ')) {
+        targetUrl = query.startsWith('http') ? query : 'https://' + query;
+    } else {
+        // Rombus Search powered by Bing Search
+        targetUrl = 'https://www.bing.com/search?q=' + encodeURIComponent(query);
+    }
+
+    urlBar.value = targetUrl;
+    searchPage.style.display = 'none';
+    frame.style.display = 'block';
+    frame.src = targetUrl;
+}
+function openWallpaperCatalog() {
+    const root = document.createElement("div");
+    root.style.cssText = `
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        background: linear-gradient(135deg, rgba(10,20,30,0.95), rgba(0,40,60,0.95));
+        color: white;
+        font-family: 'Segoe UI', sans-serif;
+        overflow: hidden;
+    `;
+
+    root.innerHTML = `
+        <div style="padding:15px 20px; background:rgba(255,255,255,0.08); border-bottom:2px solid var(--accent); display:flex; align-items:center; gap:10px;">
+            <div style="font-weight:bold; font-size:16px; color:var(--accent);">🖼️ VIK-OS WALLPAPER CATALOG (50 IMAGES)</div>
+            <div style="font-size:12px; opacity:0.8; margin-left:auto;">Click any image to copy URL or set as desktop wallpaper</div>
+        </div>
+
+        <div id="wallpaper-grid" style="flex:1; padding:20px; overflow-y:auto; display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:15px;"></div>
+    `;
+
+    const wallpapers = [
+        { name: "Cyan Fluid Waves", url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800&auto=format&fit=crop" },
+        { name: "Dark Minimal Tech", url: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=800&auto=format&fit=crop" },
+        { name: "Neon Cyber Grid", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?q=80&w=800&auto=format&fit=crop" },
+        { name: "Digital Network Nodes", url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=800&auto=format&fit=crop" },
+        { name: "Vibrant Color Smoke", url: "https://images.unsplash.com/photo-1541701494587-cb58502866ab?q=80&w=800&auto=format&fit=crop" },
+        { name: "Glass Aero Sphere", url: "https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?q=80&w=800&auto=format&fit=crop" },
+        { name: "Abstract Gradient Orbs", url: "https://images.unsplash.com/photo-1604076913837-52ab5629fba9?q=80&w=800&auto=format&fit=crop" },
+        { name: "Neon Lines Art", url: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=800&auto=format&fit=crop" },
+        { name: "Deep Space Nebula", url: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=800&auto=format&fit=crop" },
+        { name: "Purple Dark Glow", url: "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=800&auto=format&fit=crop" },
+        { name: "Blue Hexagon Pattern", url: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?q=80&w=800&auto=format&fit=crop" },
+        { name: "Futuristic Tunnel", url: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800&auto=format&fit=crop" },
+        { name: "Matrix Code Rain", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?q=80&w=800&auto=format&fit=crop" },
+        { name: "Cyan Liquid Flow", url: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=800&auto=format&fit=crop" },
+        { name: "Smooth Pastel Swirl", url: "https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=800&auto=format&fit=crop" },
+        { name: "Abstract Dark Geometry", url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800&auto=format&fit=crop" },
+        { name: "Neon Cyberpunk City", url: "https://images.unsplash.com/photo-1519501025264-65ba15a82390?q=80&w=800&auto=format&fit=crop" },
+        { name: "Cosmic Galaxy Stars", url: "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?q=80&w=800&auto=format&fit=crop" },
+        { name: "Luminous Glass Panels", url: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?q=80&w=800&auto=format&fit=crop" },
+        { name: "Blue Circuit Board", url: "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=800&auto=format&fit=crop" },
+        { name: "Gold Liquid Waves", url: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=800&auto=format&fit=crop" },
+        { name: "Dark Metal Texture", url: "https://images.unsplash.com/photo-1535868463750-c78d9543614f?q=80&w=800&auto=format&fit=crop" },
+        { name: "Emerald Crystal Glass", url: "https://images.unsplash.com/photo-1528459801416-a9e53bbf4e17?q=80&w=800&auto=format&fit=crop" },
+        { name: "Purple Aurora Borealis", url: "https://images.unsplash.com/photo-1531306728370-e2ebd9d7bb99?q=80&w=800&auto=format&fit=crop" },
+        { name: "Blue Crystal Water", url: "https://images.unsplash.com/photo-1518837695005-2083093ee35b?q=80&w=800&auto=format&fit=crop" },
+        { name: "Minimal Mountain Peak", url: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=800&auto=format&fit=crop" },
+        { name: "Abstract Line Art", url: "https://images.unsplash.com/photo-1604076913837-52ab5629fba9?q=80&w=800&auto=format&fit=crop" },
+        { name: "Fibre Optic Lights", url: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?q=80&w=800&auto=format&fit=crop" },
+        { name: "Dark Prism Reflections", url: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=800&auto=format&fit=crop" },
+        { name: "Neon Hexagon Hive", url: "https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=800&auto=format&fit=crop" },
+        { name: "Blue Laser Trails", url: "https://images.unsplash.com/photo-1516339901601-2e1b62dc0c45?q=80&w=800&auto=format&fit=crop" },
+        { name: "Soft Gradient Mesh", url: "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=800&auto=format&fit=crop" },
+        { name: "Black Hole Singularity", url: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=800&auto=format&fit=crop" },
+        { name: "Pink Neon Glow", url: "https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=800&auto=format&fit=crop" },
+        { name: "Geometric Glass Cubes", url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800&auto=format&fit=crop" },
+        { name: "Minimal Sky Stars", url: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=800&auto=format&fit=crop" },
+        { name: "Cyber Matrix Lines", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?q=80&w=800&auto=format&fit=crop" },
+        { name: "Glass Prism Spectrum", url: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=800&auto=format&fit=crop" },
+        { name: "Deep Ocean Abyss", url: "https://images.unsplash.com/photo-1518837695005-2083093ee35b?q=80&w=800&auto=format&fit=crop" },
+        { name: "Retro Wave Sun", url: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=800&auto=format&fit=crop" },
+        { name: "Minimal Foggy Forest", url: "https://images.unsplash.com/photo-1448375240586-882707db888b?q=80&w=800&auto=format&fit=crop" },
+        { name: "Golden Glowing Dust", url: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=800&auto=format&fit=crop" },
+        { name: "Dark Emerald Texture", url: "https://images.unsplash.com/photo-1528459801416-a9e53bbf4e17?q=80&w=800&auto=format&fit=crop" },
+        { name: "Minimal Desert Dunes", url: "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?q=80&w=800&auto=format&fit=crop" },
+        { name: "Abstract Acrylic Paint", url: "https://images.unsplash.com/photo-1541701494587-cb58502866ab?q=80&w=800&auto=format&fit=crop" },
+        { name: "Cyan Ice Crystal", url: "https://images.unsplash.com/photo-1518837695005-2083093ee35b?q=80&w=800&auto=format&fit=crop" },
+        { name: "Cyber City Horizon", url: "https://images.unsplash.com/photo-1519501025264-65ba15a82390?q=80&w=800&auto=format&fit=crop" },
+        { name: "Fluid Violet Silk", url: "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=800&auto=format&fit=crop" },
+        { name: "Vaporwave Grid Sunset", url: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=800&auto=format&fit=crop" },
+        { name: "High-Tech Data Core", url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=800&auto=format&fit=crop" }
+    ];
+
+    const grid = root.querySelector("#wallpaper-grid");
+
+    wallpapers.forEach((wp, index) => {
+        const card = document.createElement("div");
+        card.style.cssText = `
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(0, 210, 255, 0.25);
+            border-radius: 12px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: all 0.2s ease;
+        `;
+
+        card.innerHTML = `
+            <div style="width:100%; height:100px; border-radius:8px; overflow:hidden; background:#000;">
+                <img src="${wp.url}" style="width:100%; height:100%; object-fit:cover; transition:transform 0.3s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'" loading="lazy">
+            </div>
+            <div style="font-size:12px; font-weight:bold; color:var(--accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${index + 1}. ${wp.name}</div>
+            <div style="display:flex; gap:6px;">
+                <button class="action-btn" style="padding:6px; font-size:10px; flex:1;" onclick="event.stopPropagation(); setWallpaperDirect('${wp.url}')">SET WALLPAPER</button>
+                <button class="action-btn" style="padding:6px; font-size:10px; background:#444;" onclick="event.stopPropagation(); copyWallpaperURL('${wp.url}')">COPY</button>
+            </div>
+        `;
+
+        grid.appendChild(card);
+    });
+
+    createWindow("WALLPAPER CATALOG (50 IMAGES)", root, 780, 580);
+}
+
+// Global helpers for instant wallpaper applying & copying
+window.setWallpaperDirect = (url) => {
+    Kernel.settings.wallpaper = url;
+    applyTheme();
+    saveAll();
+    alert("Desktop wallpaper updated successfully!");
+};
+
+window.copyWallpaperURL = (url) => {
+    navigator.clipboard.writeText(url);
+    alert("Wallpaper URL copied to clipboard!");
+};
+function openBrowser() {
+    const root = document.createElement("div");
+    root.className = "browser-root";
+    root.innerHTML = `
+        <div class="browser-toolbar">
+            <button class="action-btn" onclick="this.closest('.browser-root').querySelector('iframe').src='https://www.google.com/search?igu=1'">HOME</button>
+            <input type="text" class="url-bar" value="https://www.google.com/search?igu=1">
+            <button class="action-btn" onclick="const val=this.previousElementSibling.value; this.closest('.browser-root').querySelector('iframe').src = val.includes('.') ? (val.startsWith('http') ? val : 'https://'+val) : 'https://www.google.com/search?q='+encodeURIComponent(val)+'&igu=1'">GO</button>
+        </div>
+        <div class="browser-viewport">
+            <iframe src="https://www.google.com/search?igu=1"></iframe>
+        </div>
+    `;
+    createWindow("GOOGLE BROWSER", root, 600, 500);
+}
+// --- HTML BUILDER (PRO VERSION) ---
+function openIDE(fileName = "new_game.html", existingCode = "") {
+    const root = document.createElement("div");
+    root.className = "ide-root";
+    root.innerHTML = `
+        <div class="ide-toolbar">
+            <input type="text" id="file-name" value="${fileName}" style="background:#000; color:var(--accent); border:1px solid #444; padding:8px; width:200px; font-weight:bold;">
+            <button class="action-btn" onclick="runCode(this)">▶ RUN</button>
+            <button class="action-btn" style="background:#fff" onclick="saveCode(this)">💾 SAVE</button>
+            <button class="action-btn" style="background:#ffaa00" onclick="exportPC(this)">📤 EXPORT .HTML</button>
+         </div>
+        <div class="ide-split">
+            <div class="editor-side"><textarea class="ide-text">${existingCode || "<html>\\n<style>\\n body { background:#111; color:cyan; text-align:center; padding:50px; font-family:sans-serif; }\\n</style>\\n<body>\\n <h1>LIVE GAME</h1>\\n</body>\\n</html>"}</textarea></div>
+            <div class="preview-side"><iframe id="preview"></iframe></div>
+        </div>
+    `;
+    createWindow("BUILDER: " + fileName, root, 450, 350);
+}
+window.runCode = (b) => {
+    const win = b.closest('.window');
+    const doc = win.querySelector('iframe').contentDocument;
+    doc.open(); doc.write(win.querySelector('textarea').value); doc.close();
+};
+window.saveCode = (b) => {
+    const win = b.closest('.window');
+    const name = win.querySelector('#file-name').value;
+    Kernel.fs.User[name] = win.querySelector('textarea').value;
+    saveAll(); alert("Saved to Archive!");
+};
+window.exportPC = (b) => {
+    const blob = new Blob([b.closest('.window').querySelector('textarea').value], {type: "text/html"});
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "project.html"; a.click();
+};
+function openExplorer() {
+    const wrap = document.createElement("div");
+    wrap.style.overflow = "auto";
+    const render = () => {
+        wrap.innerHTML = `
+            <div style="padding:20px; border-bottom:1px solid #333; display:flex; gap:12px; flex-wrap:wrap;">
+                <button class="action-btn" id="new">➕ NEW</button>
+                <button class="action-btn" id="upload">📤 UPLOAD</button>
+            </div>
+            <div class="explorer-list"></div>
+        `;
+        const list = wrap.querySelector(".explorer-list");
+        wrap.querySelector("#new").onclick = () => openIDE();
+        wrap.querySelector("#upload").onclick = () => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".html,.txt,.js,.json";
+            input.onchange = () => {
+                const file = input.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = e => {
+                    Kernel.fs.User[file.name] = e.target.result;
+                    saveAll();
+                    render();
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        };
+        for (let file in Kernel.fs.User) {
+            const card = document.createElement("div");
+            card.className = "file-card";
+            const size = new Blob([Kernel.fs.User[file]]).size;
+            card.innerHTML = `
+                <div class="file-info">
+                    📄 ${file}
+                    <div style="font-size:13px;opacity:.6">${size} bytes</div>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="action-btn edit">EDIT</button>
+                    <button class="action-btn dup" style="background:#666">DUP</button>
+                    <button class="action-btn dl" style="background:#00aa88">⬇</button>
+                    <button class="action-btn rename" style="background:#555">REN</button>
+                    <button class="action-btn del" style="background:#ff4444">DEL</button>
+                </div>
+            `;
+            card.querySelector(".edit").onclick = () => openIDE(file, Kernel.fs.User[file]);
+            card.querySelector(".dup").onclick = () => {
+                let copy = file.replace(/(\.\w+)?$/, "_copy$1");
+                let i = 1;
+                while (Kernel.fs.User[copy]) {
+                    copy = file.replace(/(\.\w+)?$/, `_copy${i}$1`);
+                    i++;
+                }
+                Kernel.fs.User[copy] = Kernel.fs.User[file];
+                saveAll();
+                render();
+            };
+            card.querySelector(".dl").onclick = () => {
+                const blob = new Blob([Kernel.fs.User[file]], { type: "text/plain" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = file;
+                a.click();
+            };
+            card.querySelector(".rename").onclick = () => {
+                const n = prompt("Rename file:", file);
+                if (n) {
+                    Kernel.fs.User[n] = Kernel.fs.User[file];
+                    delete Kernel.fs.User[file];
+                    saveAll();
+                    render();
+                }
+            };
+            card.querySelector(".del").onclick = () => {
+                if (confirm("Delete file?")) {
+                    delete Kernel.fs.User[file];
+                    saveAll();
+                    render();
+                }
+            };
+            list.appendChild(card);
+        }
+    };
+    render();
+    createWindow("DATA ARCHIVE", wrap, 600, 500);
+}
+function launchParkour() {
+    const gameWindow = createWindow("NEON PARKOUR", "", window.innerWidth * 0.8, window.innerHeight * 0.8);
+    const body = gameWindow.querySelector(".win-body");
+    body.style.margin = "0";
+    body.style.overflow = "hidden";
+    body.style.background = "#0a0a0a";
+    body.style.position = "relative";
+    const canvas = document.createElement("canvas");
+    canvas.style.display = "block";
+    body.appendChild(canvas);
+    const ctx = canvas.getContext("2d");
+    function resize() {
+        canvas.width = body.clientWidth;
+        canvas.height = body.clientHeight;
+    }
+    resize();
+    window.addEventListener("resize", resize);
+    const ui = document.createElement("div");
+    ui.id = "ui";
+    ui.style.position = "absolute";
+    ui.style.top = "20px";
+    ui.style.left = "20px";
+    ui.style.color = "#00ff00";
+    ui.style.textShadow = "0 0 5px #00ff00";
+    ui.style.pointerEvents = "none";
+    ui.style.zIndex = "10";
+    ui.innerHTML = `
+        <h1 id="score">Distance: 0m</h1>
+        <p>A / D to Move | SPACE to Jump (Precise Timing Required)</p>
+    `;
+    body.appendChild(ui);
+    const GRAVITY = 0.15;
+    const JUMP_FORCE = -10.5;
+    const SPEED = 3.5;
+    const player = {
+        x: 100,
+        y: 0,
+        w: 25,
+        h: 25,
+        vx: 0,
+        vy: 0,
+        onGround: false,
+        dead: false,
+        distance: 0
+    };
+    let platforms = [{ x: 0, y: 400, w: 400, h: 30 }];
+    let keys = {};
+    canvas.tabIndex = 0;
+    canvas.focus();
+    canvas.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (e.code === 'Space' || e.key === ' ') {
+            e.preventDefault();
+            if (player.onGround && !player.dead) {
+                player.vy = JUMP_FORCE;
+                player.onGround = false;
+            }
+        }
+    });
+    canvas.addEventListener('keyup', e => {
+        keys[e.code] = false;
+    });
+    body.addEventListener('click', () => canvas.focus());
+    function generatePlatforms() {
+        let last = platforms[platforms.length - 1];
+        if (last.x < player.x + canvas.width + 500) {
+            const gap = 180 + Math.random() * 135;
+            const width = 100 + Math.random() * 150;
+            const verticalShift = Math.random() * 160 - 80;
+            let newY = last.y + verticalShift;
+            newY = Math.max(150, Math.min(canvas.height - 100, newY));
+            platforms.push({ x: last.x + last.w + gap, y: newY, w: width, h: 30 });
+        }
+        if (platforms.length > 20) platforms.shift();
+    }
+    function update() {
+        if (player.dead) {
+            if (keys["Space"]) {
+                player.dead = false;
+                player.x = 100;
+                player.y = 0;
+                player.vx = 0;
+                player.vy = 0;
+                platforms = [{ x: 0, y: 500, w: 400, h: 30 }];
+                player.distance = 0;
+            }
+            return;
+        }
+        if (keys["KeyA"]) player.vx = -SPEED;
+        else if (keys["KeyD"]) player.vx = SPEED;
+        else player.vx *= 0.85;
+        player.vy += GRAVITY;
+        player.x += player.vx;
+        player.y += player.vy;
+        player.onGround = false;
+        for (let p of platforms) {
+            if (
+                player.x + player.w > p.x &&
+                player.x < p.x + p.w &&
+                player.y + player.h > p.y &&
+                player.y + player.h < p.y + p.h + player.vy + 1
+            ) {
+                if (player.vy > 0) {
+                    player.y = p.y - player.h;
+                    player.vy = 0;
+                    player.onGround = true;
+                }
+            }
+        }
+        if (player.y > canvas.height) player.dead = true;
+        player.distance = Math.max(player.distance, Math.floor(player.x / 10));
+        document.getElementById("score").innerText = `Distance: ${player.distance}m`;
+        generatePlatforms();
+    }
+    function draw() {
+        ctx.fillStyle = "#0a0a0a";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-player.x + 150, 0);
+        ctx.fillStyle = "#00ff00";
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = "#00ff00";
+        for (let p of platforms) {
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+        }
+        ctx.fillStyle = player.dead ? "#ff0000" : "#ffffff";
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = player.dead ? "red" : "white";
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+        ctx.restore();
+        if (player.dead) {
+            ctx.fillStyle = "rgba(0,0,0,0.8)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#ff0000";
+            ctx.font = "bold 50px Courier New";
+            ctx.textAlign = "center";
+            ctx.fillText("CRITICAL FAILURE", canvas.width / 2, canvas.height / 2);
+            ctx.font = "20px Courier New";
+            ctx.fillStyle = "white";
+            ctx.fillText("Press SPACE to Reboot System", canvas.width / 2, canvas.height / 2 + 50);
+        }
+        update();
+        requestAnimationFrame(draw);
+    }
+    draw();
+}
+function openSettings() {
+    const cp = document.createElement("div");
+    cp.className = "settings-grid";
+    cp.innerHTML = `
+        <h2 style="color:var(--accent); margin:0 0 20px;">Control Panel</h2>
+        <label>Wallpaper URL (Ultra HD / 4K / 8K+ supported - no limit)</label>
+        <input type="text" id="w-url" value="${Kernel.settings.wallpaper}" placeholder="https://... (3840x2160+)">
+        <label>Upload Wallpaper (Ultra HD OK)</label>
+        <input type="file" id="w-file" accept="image/*">
+        <label>Background Size</label>
+        <select id="bg-size">
+            <option value="cover" ${Kernel.settings.bgSize === "cover" ? "selected" : ""}>Cover (fill screen)</option>
+            <option value="contain" ${Kernel.settings.bgSize === "contain" ? "selected" : ""}>Contain (full image)</option>
+            <option value="100% 100%" ${Kernel.settings.bgSize === "100% 100%" ? "selected" : ""}>Stretch</option>
+        </select>
+        <label>High-Res Mode (sharp Ultra HD rendering)</label>
+        <select id="high-res">
+            <option value="true" ${Kernel.settings.highResMode ? "selected" : ""}>Enabled</option>
+            <option value="false" ${!Kernel.settings.highResMode ? "selected" : ""}>Disabled</option>
+        </select>
+        <label>Lightning Animation (pink-purple glow)</label>
+        <select id="lightning">
+            <option value="true" ${Kernel.settings.lightningEnabled ? "selected" : ""}>Enabled</option>
+            <option value="false" ${!Kernel.settings.lightningEnabled ? "selected" : ""}>Disabled</option>
+        </select>
+        <label>Base Color</label>
+        <input type="color" id="base" value="${Kernel.settings.base}">
+        <label>Accent Color</label>
+        <input type="color" id="accent" value="${Kernel.settings.accent}">
+        <label>Glass Opacity</label>
+        <input type="range" id="opacity" min="0.3" max="1" step="0.05" value="${Kernel.settings.opacity}">
+        <button class="action-btn" onclick="applySettings()" style="margin:20px 0;">Apply</button>
+        <hr style="border-color:#444; margin:20px 0;">
+        <h3 style="color:var(--accent);">Quick Tools</h3>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px;">
+            <button class="action-btn" onclick="resetDefaults()">Reset Default</button>
+            <button class="action-btn" onclick="randomAccent()">Random Accent</button>
+            <button class="action-btn danger-btn" onclick="clearCustom()">Clear Custom Apps</button>
+        </div>
+    `;
+    window.applySettings = () => {
+        Kernel.settings.base = document.getElementById('base').value;
+        Kernel.settings.accent = document.getElementById('accent').value;
+        Kernel.settings.opacity = document.getElementById('opacity').value;
+        Kernel.settings.bgSize = document.getElementById('bg-size').value;
+        Kernel.settings.highResMode = document.getElementById('high-res').value === "true";
+        Kernel.settings.lightningEnabled = document.getElementById('lightning').value === "true";
+        const url = document.getElementById('w-url').value.trim();
+        const file = document.getElementById('w-file').files[0];
+        if (file) {
+            const r = new FileReader();
+            r.onload = e => {
+                Kernel.settings.wallpaper = e.target.result;
+                applyTheme();
+                saveAll();
+            };
+            r.readAsDataURL(file);
+        } else if (url) {
+            Kernel.settings.wallpaper = url;
+            applyTheme();
+            saveAll();
+        } else {
+            applyTheme();
+            saveAll();
+        }
+        alert("Applied!");
+    };
+    window.resetDefaults = () => {
+        if (confirm("Reset all to default?")) {
+            Kernel.settings = {
+                wallpaper: "https://files.catbox.moe/twy3r4.jpg",
+                accent: "#1894ae",
+                base: "#0a0a0a",
+                opacity: 0.1,
+                bgSize: "cover",
+                highResMode: true,
+                lightningEnabled: false
+            };
+            applyTheme(); saveAll(); location.reload();
+        }
+    };
+    window.randomAccent = () => {
+        const rand = '#' + Math.floor(Math.random()*16777215).toString(16);
+        Kernel.settings.accent = rand;
+        document.getElementById('accent').value = rand;
+        applyTheme(); saveAll();
+    };
+    window.clearCustom = () => {
+        if (confirm("Clear all custom apps?")) {
+            Kernel.installedApps = [];
+            saveAll(); renderMenu();
+        }
+    };
+    createWindow("CONTROL PANEL", cp, 420, 650);
+}
+
+// ───────────────────────────────────────────────
+// NEW: Launch HTML files from archive as full windows (hacker style)
+// ───────────────────────────────────────────────
+function runFileFromArchive(filename) {
+    if (!Kernel.fs.User[filename]) {
+        alert("File not found: " + filename);
+        return;
+    }
+    const code = Kernel.fs.User[filename];
+    const appWin = createWindow(`App: ${filename}`, "", 1100, 720);
+    const body = appWin.querySelector(".win-body");
+    body.style.cssText = "margin:0;background:#000;overflow:hidden;position:relative;";
+    
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:absolute;inset:0;background:rgba(0,20,0,0.9);color:#0f0;font-family:'Courier New',monospace;font-size:22px;display:flex;align-items:center;justify-content:center;z-index:9999;pointer-events:none;text-shadow:0 0 10px #0f0;";
+    overlay.innerHTML = ">> SESSION ACTIVATED <<<br>CLICK TO FOCUS • ESC = RELEASE CONTROL";
+    body.appendChild(overlay);
+
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:none;";
+    iframe.sandbox = "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock";
+    body.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open(); doc.write(code); doc.close();
+
+    function focusSession() { iframe.contentWindow.focus(); overlay.style.display = "none"; }
+    function releaseControl() { if (document.pointerLockElement) document.exitPointerLock(); overlay.style.display = "flex"; }
+
+    setTimeout(focusSession, 400);
+    body.onclick = appWin.onclick = focusSession;
+
+    const escHandler = e => { if (e.key === "Escape") releaseControl(); };
+    document.addEventListener("keydown", escHandler);
+
+    const closeBtn = appWin.querySelector(".close");
+    const oldClose = closeBtn.onclick;
+    closeBtn.onclick = () => {
+        document.removeEventListener("keydown", escHandler);
+        if (document.pointerLockElement) document.exitPointerLock();
+        if (oldClose) oldClose();
+    };
+}
+
+// ───────────────────────────────────────────────
+// Launch HTML files from archive (hacker style)
+// ───────────────────────────────────────────────
+function runFileFromArchive(filename) {
+    if (!Kernel.fs.User[filename]) {
+        alert("File not found: " + filename);
+        return;
+    }
+    const code = Kernel.fs.User[filename];
+    const appWin = createWindow(`App: ${filename}`, "", 1100, 720);
+    const body = appWin.querySelector(".win-body");
+    body.style.cssText = "margin:0;background:#000;overflow:hidden;position:relative;";
+
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:absolute;inset:0;background:rgba(0,20,0,0.9);color:#0f0;font-family:'Courier New',monospace;font-size:22px;display:flex;align-items:center;justify-content:center;z-index:9999;pointer-events:none;text-shadow:0 0 10px #0f0;";
+    overlay.innerHTML = ">> SESSION ACTIVATED <<<br>CLICK TO FOCUS • ESC = RELEASE CONTROL";
+    body.appendChild(overlay);
+
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:none;";
+    iframe.sandbox = "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock";
+    body.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open(); doc.write(code); doc.close();
+
+    function focusSession() { iframe.contentWindow.focus(); overlay.style.display = "none"; }
+    function releaseControl() { if (document.pointerLockElement) document.exitPointerLock(); overlay.style.display = "flex"; }
+
+    setTimeout(focusSession, 400);
+    body.onclick = appWin.onclick = focusSession;
+
+    const escHandler = e => { if (e.key === "Escape") releaseControl(); };
+    document.addEventListener("keydown", escHandler);
+
+    const closeBtn = appWin.querySelector(".close");
+    const oldClose = closeBtn.onclick;
+    closeBtn.onclick = () => {
+        document.removeEventListener("keydown", escHandler);
+        if (document.pointerLockElement) document.exitPointerLock();
+        if (oldClose) oldClose();
+    };
+}
+
+// ───────────────────────────────────────────────
+// VIK TERMINAL 1.0 — NO COLLAPSE + PERFECT SCROLLING
+// ───────────────────────────────────────────────
+function openTerminal() {
+    const win = createWindow("VIK TERMINAL 1.0", "", 700, 500);
+    const body = win.querySelector(".win-body");
+    body.className = "terminal";
+    body.style.cssText += "background:#000;color:#0f0;font-family:'Courier New',monospace;font-size:15px;line-height:1.45;display:flex;flex-direction:column;";
+
+    // Hide collapse button (so user cannot minimize terminal)
+    const collapseBtn = win.querySelector(".win-ctrl button:first-child");
+    if (collapseBtn) {
+        collapseBtn.style.display = "none";  // hide _
+        collapseBtn.disabled = true;
+        collapseBtn.title = "Collapse disabled on terminal";
+    }
+
+    body.innerHTML = `
+        <div id="term-out" style="flex:1;overflow-y:auto;padding:18px 24px;white-space:pre-wrap;word-break:break-word;background:#000;"></div>
+        <div style="display:flex;align-items:center;padding:0 24px 14px;background:#000;border-top:1px solid #0a3;">
+            <span style="color:#0f0;font-weight:bold;white-space:pre;">root@vikos:~# </span>
+            <input id="term-in" autocomplete="off" autofocus style="flex:1;background:transparent;border:none;color:#0f0;font:inherit;outline:none;caret-color:#0f8;">
+        </div>
+    `;
+
+    const output = body.querySelector("#term-out");
+    const input = body.querySelector("#term-in");
+    let history = [], histIdx = -1;
+    let autoScroll = true;
+
+    function log(txt, color = "#0f0") {
+        const line = document.createElement("div");
+        line.style.color = color;
+        line.textContent = txt;
+        output.appendChild(line);
+
+        // Auto-scroll only if user is near bottom or just typed
+        if (autoScroll || (output.scrollTop + output.clientHeight >= output.scrollHeight - 100)) {
+            output.scrollTop = output.scrollHeight;
+        }
+    }
+
+    function err(txt) { log("[-] " + txt, "#ff5555"); }
+
+    function run(cmdLine) {
+        if (!cmdLine.trim()) return;
+        history.push(cmdLine);
+        histIdx = history.length;
+        log("root@vikos:~# " + cmdLine, "#88ff88");
+
+        const match = cmdLine.trim().match(/^(\S+)\s*(.*)$/);
+        const op = match ? match[1].toLowerCase() : "";
+        let arg = match ? match[2].replace(/^["']|["']$/g, '').trim() : "";
+
+        if (op === "help" || op === "?") {
+            log("VIK Terminal 1.0 commands:");
+            log("ls                → list files in archive");
+            log("run <file>        → launch .html (spaces OK)");
+            log("kill <title>      → close window by title");
+            log("volume <0-100>    → set audio volume");
+            log("brightness <30-200> → set screen brightness");
+            log("sound on/off      → control soundtrack");
+            log("theme <hex>       → change accent color");
+            log("wallpaper <url>   → set background");
+            log("sysinfo           → system stats");
+            log("echo <text>       → print text");
+            log("ps                → list open windows");
+            log("reboot            → reload OS");
+            log("shutdown          → fake shutdown");
+            log("time              → current time");
+            log("whoami            → current user");
+            log("date              → date & time");
+            log("uptime            → session uptime");
+            log("beep              → play beep");
+            log("cls / clear       → clear screen");
+            log("about             → info");
+            log("exit              → close terminal");
+            log(" ");
+            log("Tip: scroll with mouse wheel or touch. Collapse is disabled.");
+            return;
+        }
+
+        if (op === "clear" || op === "cls") { output.innerHTML = ""; autoScroll = true; return; }
+
+        if (op === "ls") {
+            const files = Object.keys(Kernel.fs.User);
+            log(files.length ? files.join("  ") : "(empty)");
+            return;
+        }
+
+        if (op === "run") {
+            if (!arg) return err("Usage: run filename.html");
+            runFileFromArchive(arg);
+            log("[+] Launched: " + arg);
+            return;
+        }
+
+        if (op === "kill") {
+            if (!arg) return err("Usage: kill Browser");
+            let count = 0;
+            document.querySelectorAll(".window").forEach(w => {
+                const title = w.querySelector(".title")?.textContent || "";
+                if (title.toLowerCase().includes(arg.toLowerCase())) {
+                    w.remove();
+                    count++;
+                }
+            });
+            log(count ? `[+] Closed ${count} window(s)` : "[-] No match");
+            return;
+        }
+
+        if (op === "volume") {
+            const v = parseInt(arg);
+            if (isNaN(v) || v < 0 || v > 100) return err("Usage: volume 0-100");
+            Kernel.settings.soundtrackVolume = v / 100;
+            if (audioPlayer) audioPlayer.volume = Kernel.settings.soundtrackVolume;
+            saveAll();
+            log(`[+] Volume: ${v}%`);
+            return;
+        }
+
+        if (op === "brightness") {
+            const b = parseInt(arg);
+            if (isNaN(b) || b < 30 || b > 200) return err("Usage: brightness 30-200");
+            Kernel.settings.brightness = b / 100;
+            document.body.style.filter = `brightness(${Kernel.settings.brightness})`;
+            saveAll();
+            log(`[+] Brightness: ${b}%`);
+            return;
+        }
+
+        if (op === "sound") {
+            if (arg === "on") {
+                if (Kernel.settings.soundtrackUrl) initAudioPlayer().play().catch(()=>log("Click first","#ffaa00"));
+                else log("[-] No soundtrack");
+            } else if (arg === "off") {
+                if (audioPlayer) audioPlayer.pause();
+            }
+            return;
+        }
+
+        if (op === "theme") {
+            if (!arg || !arg.startsWith("#")) return err("Usage: theme #rrggbb");
+            Kernel.settings.accent = arg;
+            applyTheme();
+            saveAll();
+            log(`[+] Accent: ${arg}`);
+            return;
+        }
+
+        if (op === "wallpaper") {
+            if (!arg) return err("Usage: wallpaper https://...");
+            Kernel.settings.wallpaper = arg;
+            applyTheme();
+            saveAll();
+            log(`[+] Wallpaper set`);
+            return;
+        }
+
+        if (op === "sysinfo") {
+            log("Memory: ~" + (performance.memory ? (performance.memory.usedJSHeapSize/1024/1024).toFixed(1) : "??") + " MB");
+            log("Uptime: " + Math.floor(performance.now()/1000) + "s");
+            log("Browser: " + navigator.userAgent.split(" ").pop());
+            return;
+        }
+
+        if (op === "echo") {
+            log(arg || "(empty)");
+            return;
+        }
+
+        if (op === "ps") {
+            log("Open windows:");
+            document.querySelectorAll(".window").forEach((w,i) => {
+                const t = w.querySelector(".title")?.textContent || "Untitled";
+                log(`  ${i+1}. ${t}`);
+            });
+            return;
+        }
+
+        if (op === "reboot") {
+            if (confirm("Reboot VikOS?")) location.reload();
+            return;
+        }
+
+        if (op === "shutdown LOL") {
+            log("Shutting down LOL...", "#ff8800");
+            setTimeout(() => {
+                document.body.innerHTML = `<div style="height:100vh;background:#000;color:#0f0;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:40px;">VIKOS SHUTDOWN LOOL</div>`;
+            }, 1200);
+            return;
+        }
+
+        if (op === "time") { log(new Date().toLocaleTimeString()); return; }
+        if (op === "whoami") { log("root"); return; }
+        if (op === "date") { log(new Date().toLocaleString()); return; }
+        if (op === "uptime") { log("Uptime: " + Math.floor(performance.now()/1000) + "s"); return; }
+        if (op === "beep") {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const o = ctx.createOscillator(); o.type='sine'; o.frequency.value=900; o.connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.15);
+            log("[BEEP]");
+            return;
+        }
+
+        if (op === "about") {
+            log("VIK Terminal 1.0 — VikOS power tool");
+            log("Scroll with mouse/touch. Collapse disabled.");
+            log("↑ ↓ arrows for history");
+            return;
+        }
+
+        if (op === "exit") { win.remove(); return; }
+
+        err(`unknown command: ${op}  (type help)`);
+    }
+
+    log("┌─────────────────────────────────────────────────────────────┐", "#0a5");
+    log("│               VIK TERMINAL 1.0 — FULL POWER                 │", "#0f0");
+    log("│          Type 'help' for all commands & examples            │", "#0a5");
+    log("└─────────────────────────────────────────────────────────────┘", "#0a5");
+
+    input.onkeydown = e => {
+        if (e.key === "Enter") {
+            run(input.value);
+            input.value = "";
+            autoScroll = true;
+        } else if (e.key === "ArrowUp" && history.length) {
+            histIdx = Math.max(0, histIdx-1);
+            input.value = history[histIdx];
+        } else if (e.key === "ArrowDown") {
+            histIdx = Math.min(history.length, histIdx+1);
+            input.value = histIdx < history.length ? history[histIdx] : "";
+        }
+    };
+
+    // Detect manual scroll → disable auto-scroll until new command
+    output.addEventListener("scroll", () => {
+        if (output.scrollTop + output.clientHeight < output.scrollHeight - 20) {
+            autoScroll = false;
+        } else {
+            autoScroll = true;
+        }
+    });
+
+    win.onclick = () => input.focus();
+    setTimeout(() => input.focus(), 200);
+}
+function toggleStart() {
+    const m = document.getElementById("start-menu");
+    m.style.display = (m.style.display === "flex") ? "none" : "flex";
+}
+function searchApps() {
+    let q = document.getElementById("start-search").value.toLowerCase();
+    document.querySelectorAll(".menu-item").forEach(i => i.style.display = i.innerText.toLowerCase().includes(q) ? "flex" : "none");
+}
+function renderMenu() {
+    const list = document.getElementById("app-list");
+    list.innerHTML = "";
+    Kernel.apps.forEach(app => {
+        const i = document.createElement("div");
+        i.className = "menu-item";
+        i.innerHTML = `<span class="emoji">${app.e}</span> ${app.n}`;
+        i.onclick = () => { app.a(); toggleStart(); };
+        list.appendChild(i);
+    });
+}
+function renderMenu() {
+    const list = document.getElementById("app-list");
+    list.innerHTML = "";
+
+    // Built-in + auto-saved apps (sorted alphabetically for better look)
+    Kernel.apps.sort((a,b) => a.n.localeCompare(b.n)).forEach(app => {
+        const i = document.createElement("div");
+        i.className = "menu-item";
+        i.style.transition = "all 0.2s";
+        i.innerHTML = `<span class="emoji" style="font-size:32px;">${app.e}</span> <span style="margin-left:12px;">${app.n}</span>`;
+        i.onclick = () => { app.a(); toggleStart(); };
+        i.onmouseover = () => { i.style.background = "rgba(0,210,255,0.25)"; i.style.transform = "translateX(8px)"; };
+        i.onmouseout = () => { i.style.background = ""; i.style.transform = ""; };
+        list.appendChild(i);
+    });
+
+    // Separator only if there are saved apps
+    if (Kernel.apps.length > 6) {  // assuming 6 built-ins
+        const sep = document.createElement("div");
+        sep.style.height = "2px";
+        sep.style.background = "linear-gradient(to right, transparent, #0f0, transparent)";
+        sep.style.margin = "15px 0";
+        list.appendChild(sep);
+    }
+}
+function boot() {
+    Kernel.apps = [
+        { n: "HTML BUILDER", a: openIDE, e: "🛠️" },
+        { n: "DATA ARCHIVE", a: openExplorer, e: "📂" },
+        { n: "GOOGLE SEARCH", a: openBrowser, e: "🌐" },
+        { n: "CONTROL PANEL", a: openSettings, e: "⚙️" },
+        { n: "NEON PARKOUR", a: launchParkour, e: "⬜" },
+        { n: "TERMINAL", a: openTerminal, e: "💻" },
+        { n: "ROMBUS BROWSER", a: openRombus, e: "🔷" },  
+        { n: "WALLPAPER CATALOG", a: openWallpaperCatalog, e: "🖼️" },   // ← added here 
+    ];
+    renderMenu();
+    applyTheme();
+    setInterval(() => {
+        const now = new Date();
+        document.getElementById("clock").innerHTML = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + "<br>" + now.toLocaleDateString();
+    }, 1000);
+}
+document.getElementById("desktop").onclick = () => { document.getElementById("start-menu").style.display = "none"; };
+</script>
+</body>
+</html>
